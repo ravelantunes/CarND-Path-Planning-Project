@@ -5,31 +5,45 @@
 #include <vector>
 #include "Car.h"
 
-void Car::update(const std::vector<double> &updatedCarValue) {
-  x_ = updatedCarValue[0];
-  y_ = updatedCarValue[1];
-  speed_ = updatedCarValue[2];
-  yaw_ = updatedCarValue[3];
-  s_ = updatedCarValue[4];
-  d_ = updatedCarValue[5];
+Car::Car() {
+
 }
 
-void Car::setMap(const Map map) {
-  map_ = map;
+Car::~Car() {
+
 }
 
-double Car::getX_() const {
-  return x_;
+void Car::update(const CarPosition &carPosition) {
+  x_ = carPosition.x;
+  y_ = carPosition.y;
+  speed_ = carPosition.speed;
+  yaw_ = carPosition.yaw;
+  s_ = carPosition.s;
+  d_ = carPosition.d;
+  speed_ = carPosition.speed;
 }
 
-double Car::getY_() const {
-  return y_;
+const PathCartesian &Car::getCurrentPath() const {
+  return currentPath_;
 }
 
-double Car::getSpeed_() const {
-  return speed_;
+void Car::setCurrentPath(const PathCartesian &currentPath) {
+  this->currentPath_ = currentPath;
+//  Car::currentPath_ = currentPath_;
 }
 
-double Car::getAngle_() const {
-  return angle_;
-}
+void Car::setMap(const Map map) { map_ = map; }
+
+double Car::getX() const { return x_; }
+
+double Car::getY() const { return y_; }
+
+double Car::getAngle() const { return angle_; }
+
+double Car::getYaw() const { return yaw_; }
+
+double Car::getS() const { return s_; }
+
+double Car::getD() const { return d_; }
+
+double Car::getSpeed() const { return speed_; }
