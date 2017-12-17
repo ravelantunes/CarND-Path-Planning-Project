@@ -3,6 +3,7 @@
 //
 
 #include <vector>
+#include <iostream>
 #include "Car.h"
 
 Car::Car() {
@@ -21,6 +22,7 @@ void Car::update(const CarPosition &carPosition) {
   s_ = carPosition.s;
   d_ = carPosition.d;
   speed_ = carPosition.speed;
+  angle_ = carPosition.angle;
 }
 
 const PathCartesian &Car::getCurrentPath() const {
@@ -47,3 +49,11 @@ double Car::getS() const { return s_; }
 double Car::getD() const { return d_; }
 
 double Car::getSpeed() const { return speed_; }
+
+void Car::printState() {
+  std::cout << "pos cartesian: " << getX() << ", " << getY();
+  std::cout << "  frenet: " << getS() << ", " << getD();
+  std::cout << "  speed: " << getSpeed();
+  std::cout << "  angle: " << getAngle();
+  std::cout << std::endl;
+}

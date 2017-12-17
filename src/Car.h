@@ -71,6 +71,8 @@ public:
   void setCurrentPath(const PathCartesian &currentPath);
 
   double getSpeed() const;
+
+  void printState();
 };
 
 

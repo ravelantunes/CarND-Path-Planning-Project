@@ -328,6 +328,7 @@ int main() {
   uWS::Hub h;
 
   Car car;
+  PathGenerator pathGenerator;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
   vector<double> map_waypoints_x;
@@ -361,7 +362,7 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&car, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&pathGenerator, &car, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     clock_t tStart = clock();
 
@@ -395,6 +396,7 @@ int main() {
           CarPosition car_position = {j[1]["x"], j[1]["y"], j[1]["s"], j[1]["d"], j[1]["yaw"], deg2rad(j[1]["yaw"]), j[1]["speed"]};
           car.update(car_position);
           car.setCurrentPath(previous_path);
+          cout << setprecision(4) << deg2rad(j[1]["yaw"]) << endl;
 
           //Parse the list of sensor fusion data
           vector<SensorFusionData> sensor_fusion_data;
@@ -405,35 +407,37 @@ int main() {
             sensor_fusion_data.push_back(detected_car);
           }
 
-          vector<PathCartesian> paths = GeneratePaths(KEEP_LANE, car, map);
+          vector<PathCartesian> paths = pathGenerator.generatePaths(KEEP_LANE, car, map);
+          PathCartesian best_path = paths[0];
 //          paths.push_back(GeneratePath(car, DToLane(car.getD()), 10, map));
 
 
           //Filter out not feasible paths
-          vector<PathCartesian> feasible_paths;
-          copy_if(paths.begin(), paths.end(), back_inserter(feasible_paths), [&car, &sensor_fusion_data, &map](PathCartesian p){return CheckIfPathIsFeasible(car, p, sensor_fusion_data, map); });
+//          vector<PathCartesian> feasible_paths;
+//          copy_if(paths.begin(), paths.end(), back_inserter(feasible_paths), [&car, &sensor_fusion_data, &map](PathCartesian p){return CheckIfPathIsFeasible(car, p, sensor_fusion_data, map); });
 //          cout << "number of feasible paths: " << feasible_paths.size() << endl;
 
           //Get best path, first by iterating each path and caching the cost
-          for (PathCartesian &path : feasible_paths) {
-            const double cost = CalculateCostFunction(car, path, sensor_fusion_data, map, false);
-            path.cost = cost;
-          }
+//          for (PathCartesian &path : feasible_paths) {
+//            const double cost = CalculateCostFunction(car, path, sensor_fusion_data, map, false);
+//            path.cost = cost;
+//          }
 
-          PathCartesian best_path;
+//          PathCartesian best_path;
 
-          sort(feasible_paths.begin(), feasible_paths.end(),
-               [](const PathCartesian &a, const PathCartesian &b) -> bool
-               {
-                 return a.cost < b.cost;
-               });
+//          sort(feasible_paths.begin(), feasible_paths.end(),
+//               [](const PathCartesian &a, const PathCartesian &b) -> bool
+//               {
+//                 return a.cost < b.cost;
+//               });
+//
+//          if (feasible_paths.size() == 0) {
+//            cout << "NO FEASIBLE PATHS TO TAKE!" << endl;
+//          }
 
-          if (feasible_paths.size() == 0) {
-            cout << "NO FEASIBLE PATHS TO TAKE!" << endl;
-          }
-
-          best_path = feasible_paths[0];
-          CalculateCostFunction(car, best_path, sensor_fusion_data, map, true);
+//          best_path = feasible_paths[0];
+//          best_path = paths[0];
+//          CalculateCostFunction(car, best_path, sensor_fusion_data, map, true);
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           msgJson["next_x"] = best_path.x_points;
