@@ -396,7 +396,6 @@ int main() {
           CarPosition car_position = {j[1]["x"], j[1]["y"], j[1]["s"], j[1]["d"], j[1]["yaw"], deg2rad(j[1]["yaw"]), j[1]["speed"]};
           car.update(car_position);
           car.setCurrentPath(previous_path);
-          cout << setprecision(4) << deg2rad(j[1]["yaw"]) << endl;
 
           //Parse the list of sensor fusion data
           vector<SensorFusionData> sensor_fusion_data;
@@ -455,7 +454,7 @@ int main() {
       }
 
       const double processing_time = (double)(clock() - tStart)/CLOCKS_PER_SEC * 1000;
-      printf("Time taken: %.4f ms\n", processing_time);
+//      printf("Time taken: %.4f ms\n", processing_time);
     }
   });
 

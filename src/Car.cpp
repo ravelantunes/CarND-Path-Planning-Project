@@ -30,8 +30,7 @@ const PathCartesian &Car::getCurrentPath() const {
 }
 
 void Car::setCurrentPath(const PathCartesian &currentPath) {
-  this->currentPath_ = currentPath;
-//  Car::currentPath_ = currentPath_;
+  currentPath_ = currentPath;
 }
 
 void Car::setMap(const Map map) { map_ = map; }
@@ -55,5 +54,6 @@ void Car::printState() {
   std::cout << "  frenet: " << getS() << ", " << getD();
   std::cout << "  speed: " << getSpeed();
   std::cout << "  angle: " << getAngle();
+  std::cout << "  steps left: " << getCurrentPath().x_points.size();
   std::cout << std::endl;
 }

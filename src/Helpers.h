@@ -19,8 +19,8 @@ vector<double> CarToGlobalCoordinates(double global_x, double global_y, double c
 
 double EvaluatePoly(vector<double> coeffs, double x) {
   double value = 0;
-  for (int c = 0; c < coeffs.size(); c++) {
-    value += pow(x, c + 1) * coeffs[c];
+  for (unsigned int c = 0; c < coeffs.size(); c++) {
+    value += pow(x, c) * coeffs[c];
   }
   return value;
 }
