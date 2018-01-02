@@ -24,6 +24,12 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
   //The reason for that is that the simulator will usually only be able to perform about 3 steps between iterations,
   //which wouldn't allow for the path planner to plan a full path
   const unsigned long initial_planned_path_size = car.getCurrentPath().x_points.size();
+
+  bool already_generated_path = false;
+  if (initial_planned_path_size > 0) {
+    already_generated_path = true;
+  }
+
   PathCartesian previous_path = car.getCurrentPath();
 //  if (previous_path.x_points.size() > number_of_steps_to_reuse_) {
 //    previous_path.x_points.erase(previous_path.x_points.begin()+number_of_steps_to_reuse_, previous_path.x_points.end());
@@ -38,14 +44,19 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
   }
 
   //Then, we fit a polynomial from to use to generate the paths
-  // State is position, speed, acceleration
+  // State is position, speespl(i);d, acceleration
+  double time_step_modifier = 0.5;
+  double time_steps = default_path_length_;
   vector<double> start_s = {0, 0, 0};
-  vector<double> end_s = {0.2, 0, 0};
-  vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, default_path_length_);
-  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, default_path_length_);
+  vector<double> end_s = {.4, 0, 0};
+  vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, time_steps);
+  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, time_steps);
 
   //Iterate to create paths points until it fills up the expected number of paths
   for (auto i = new_path_x.size(); i < default_path_length_; i++) {
+//    if (already_generated_path) {
+//      break;
+//    }
     //Step to be evaluated
     double step = i+1;
 
@@ -56,10 +67,9 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
     d_point = 6;
 
     vector<double> xy_points = getXY(s_point, d_point, map.s_waypoints, map.x_waypoints, map.y_waypoints);
-
     new_path_x.push_back(xy_points[0]);
     new_path_y.push_back(xy_points[1]);
-
+;
     assert(new_path_x.size() == new_path_y.size());
   }
 
@@ -67,6 +77,8 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
       .x_points = new_path_x,
       .y_points = new_path_y
   };
+
+  path = normalizeWithSpline(path, car);
 
   vector<PathCartesian> paths;
   paths.push_back(path);
@@ -106,7 +118,6 @@ vector<double> PathGenerator::fitPolynomial(vector<double> start, vector <double
       3*pow(time_steps, 2), 4*pow(time_steps,3), 5*pow(time_steps, 4),
       6*time_steps, 12*pow(time_steps, 2), 20*pow(time_steps, 3);
 
-
   Eigen::MatrixXd matrix_b = Eigen::MatrixXd(3, 1);
   matrix_b << end[0] - (start[0] + start[1] * time_steps + 0.5 * start[2] * pow(time_steps, 2)),
       end[1] - (start[1] + start[2] * time_steps),
@@ -118,6 +129,78 @@ vector<double> PathGenerator::fitPolynomial(vector<double> start, vector <double
 
   vector<double> result = {start[0], start[1], .5*start[2], matrix_c[0], matrix_c[1], matrix_c[2]};
   return result;
+}
+
+PathCartesian PathGenerator::normalizeWithSpline(PathCartesian &path, Car &car) {
+
+  //Convert path into local coordinates
+  vector<double> local_x, local_y;
+  for (int i = 0; i < path.x_points.size(); i++) {
+    vector<double> local_coords = GlobalToCarCoordinates(path.x_points[i], path.y_points[i], car);
+    local_x.push_back(local_coords[0]);
+    local_y.push_back(local_coords[1]);
+  }
+
+  //Fit spline with local coordinates
+  vector<double> s_y, s_x, time_step;
+  int counter_of_spline_points = 0;
+  for (int i = 0; i < path.x_points.size(); i+=30) {
+    counter_of_spline_points++;
+    s_x.push_back(local_x[i]);
+    s_y.push_back(local_y[i]);
+    time_step.push_back((double)i);
+  }
+
+  //Make sure we fit with last point
+  s_x.push_back(local_x[local_x.size()-1]);
+  s_y.push_back(local_y[local_y.size()-1]);
+  time_step.push_back(local_x.size());
+
+  tk::spline spl_x, spl_y;
+  spl_x.set_points(time_step, s_x);
+  spl_y.set_points(time_step, s_y);
+
+  //Transform back to global coordinates
+  for (int i = 0; i < path.x_points.size(); i++) {
+    double x = spl_x(i);
+    double y = spl_y(i);
+
+    const double translated_x = x * cos(car.getAngle()) - y * sin(car.getAngle()) + car.getX();
+    const double translated_y = x * sin(car.getAngle()) + y * cos(car.getAngle()) + car.getY();
+
+//    DEBUGGING
+//    double x_diff = (translated_x - path.x_points[i]);
+//    double y_diff = (translated_y - path.y_points[i]);
+//    cout << "X: " << path.x_points[i] << ", " << translated_x << "  " << "(" << x_diff << ")";
+//    cout << "     ";
+//    cout << "Y: " << path.y_points[i] << ", " << translated_y << "  " << "(" << y_diff << ")";
+//    cout << endl;
+
+    path.x_points[i] = translated_x;
+    path.y_points[i] = translated_y;
+  }
+
+  PathCartesian new_path = {
+      path.x_points,
+      path.y_points
+  };
+
+  return new_path;
+}
+
+tk::spline PathGenerator::fitSplineWithPath(PathCartesian &path) {
+//  //  //Transform spline points into local coordinate
+//  for (int i = 0; i < path.x_points.size(); i++) {
+//    double shift_x = path.x_points[i] - ref_x;
+//    double shift_y = path.x_points[i] - ref_y;
+//
+//    path.x_points[i] = shift_x * cos(0 - ref_angle) - shift_y * sin(0 - ref_angle);
+//    path.x_points[i] = shift_x * sin(0 - ref_angle) + shift_y * cos(0 - ref_angle);
+//  }
+
+  tk::spline spl;
+  spl.set_points(path.x_points, path.y_points);
+  return spl;
 }
 
 tk::spline PathGenerator::fitSpline(int target_lane, double target_velocity) {

@@ -18,7 +18,7 @@ using namespace std;
 class PathGenerator {
 private:
   static const int number_of_steps_to_reuse_ = 0;
-  static const int default_path_length_ = 100;
+  static const int default_path_length_ = 150;
 
   double ref_x_;
   double ref_y_;
@@ -36,7 +36,11 @@ private:
 public:
   vector<PathCartesian> generatePaths(ControlState controlState, Car &car, Map &map);
 
+  tk::spline fitSplineWithPath(PathCartesian &path);
+
   vector<double> getRefValuesForCurrentPath(Car &car, vector<double> &new_path_x, vector<double> &new_path_y);
+
+  PathCartesian normalizeWithSpline(PathCartesian &path, Car &car);
 };
 
 #endif //PATH_PLANNING_PATHGENERATOR_H

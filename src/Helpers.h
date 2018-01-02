@@ -17,6 +17,16 @@ int DToLane(double d);
 
 vector<double> CarToGlobalCoordinates(double global_x, double global_y, double car_x, double car_y, double car_angle);
 
+vector<double> GlobalToCarCoordinates(double global_x, double global_y, double car_x, double car_y, double car_angle);
+
+vector<double> GlobalToCarCoordinates(double global_x, double global_y, Car &car) {
+  const double relative_x = global_x - car.getX();
+  const double relative_y = global_y - car.getY();
+  const double translated_x = relative_x * cos(0-car.getAngle()) - relative_y * sin(0-car.getAngle());
+  const double translated_y = relative_x * sin(0-car.getAngle()) + relative_y * cos(0-car.getAngle());
+  return {translated_x, translated_y};
+}
+
 double EvaluatePoly(vector<double> coeffs, double x) {
   double value = 0;
   for (unsigned int c = 0; c < coeffs.size(); c++) {
