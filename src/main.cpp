@@ -14,6 +14,7 @@
 #include "Car.h"
 #include "PathStructs.h"
 #include "PathGenerator.h"
+#include "SensorFusionData.h"
 
 using namespace std;
 
@@ -25,15 +26,15 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
-struct SensorFusionData {
-  int id;
-  double x;
-  double y;
-  double x_speed;
-  double y_speed;
-  double s;
-  double d;
-};
+//struct SensorFusionData {
+//  int id;
+//  double x;
+//  double y;
+//  double x_speed;
+//  double y_speed;
+//  double s;
+//  double d;
+//};
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -406,7 +407,7 @@ int main() {
             sensor_fusion_data.push_back(detected_car);
           }
 
-          vector<PathCartesian> paths = pathGenerator.generatePaths(KEEP_LANE, car, map);
+          vector<PathCartesian> paths = pathGenerator.generatePaths(KEEP_LANE, car, map, sensor_fusion_data);
           PathCartesian best_path = paths[0];
 //          paths.push_back(GeneratePath(car, DToLane(car.getD()), 10, map));
 

@@ -4,6 +4,7 @@
 #include "spline.h"
 #include "PathStructs.h"
 #include "PathGenerator.h"
+#include "SensorFusionData.h"
 #include <vector>
 #include <iostream>
 #include <cmath>
@@ -15,7 +16,9 @@
 
 using namespace std;
 
-vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Car &car, Map &map) {
+bool change_lane = false;
+
+vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data) {
 
   //Print car state
 //  car.printState();
@@ -44,19 +47,56 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
   }
 
   //Then, we fit a polynomial from to use to generate the paths
-  // State is position, speespl(i);d, acceleration
-  double time_step_modifier = 0.5;
+  double delta_time = 0.2; //Time between each step
+  double METERS_IN_MILE = 1609.34;
+  double speed_limit = 48; //In miles
+  double speed_limit_in_meters_per_second = (speed_limit * METERS_IN_MILE) / 60 / 60;
+  double number_of_seconds = default_path_length_ * delta_time;
+  double car_speed_in_meeters_per_second = (METERS_IN_MILE * car.getSpeed() / 60 / 60);
+  double max_acceleration = 10.0;
+  double MAX_DISTANCE_LIMIT = speed_limit_in_meters_per_second * number_of_seconds / 1000;
+  double max_achievable_speed = car_speed_in_meeters_per_second + max_acceleration * number_of_seconds;
+  double max_achievable_distance = (car_speed_in_meeters_per_second + max_achievable_speed) / 2 * number_of_seconds;
+  max_achievable_distance /= 100; //I'm still not sure why it's needed
+
+  double final_position_goal = min(max_achievable_distance, MAX_DISTANCE_LIMIT);
+
+  //Iterate each detected car from sensor fusion data
+  for (int i = 0; i < sensor_fusion_data.size(); i++) {
+    SensorFusionData detected_car = sensor_fusion_data[i];
+
+    // First, test if the car d positions overlap. We do that first since we can't predict if the car will change
+    // lanes, so only care about cars on the same lane of the current step. That way, we save some cycles from the
+    // s position prediction
+    if (detected_car.d < car.getD() + 2 && detected_car.d > car.getD() - 2) {
+
+      //Estimate detected car position at the step s_points_iterator
+      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
+      const double estimated_detected_s = detected_car.s + (estimated_car_speed * number_of_seconds);
+
+      double distance = estimated_detected_s - car.getS();
+      distance -= 20; //TODO: no idea why
+
+      if (distance > 0) {
+        cout << "car " << detected_car.id << ": " << distance << endl;
+        final_position_goal = min(distance/100, final_position_goal);
+        if (distance < 30) {
+          change_lane = true;
+        }
+      }
+    }
+  }
+
   double time_steps = default_path_length_;
   vector<double> start_s = {0, 0, 0};
-  vector<double> end_s = {.4, 0, 0};
+  vector<double> end_s = {min(max_achievable_distance, final_position_goal), 0, 0};
+  vector<double> end_d = {0, 0, 0};
+
   vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, time_steps);
-  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, time_steps);
+  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, end_d, time_steps);
 
   //Iterate to create paths points until it fills up the expected number of paths
   for (auto i = new_path_x.size(); i < default_path_length_; i++) {
-//    if (already_generated_path) {
-//      break;
-//    }
     //Step to be evaluated
     double step = i+1;
 
@@ -65,11 +105,14 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
     double s_point = ref_s_;
     double d_point = ref_d_;
     d_point = 6;
+    if (change_lane) {
+      d_point = 2;
+    }
 
     vector<double> xy_points = getXY(s_point, d_point, map.s_waypoints, map.x_waypoints, map.y_waypoints);
     new_path_x.push_back(xy_points[0]);
     new_path_y.push_back(xy_points[1]);
-;
+
     assert(new_path_x.size() == new_path_y.size());
   }
 

@@ -15,10 +15,12 @@ using namespace std;
 #ifndef PATH_PLANNING_PATHGENERATOR_H
 #define PATH_PLANNING_PATHGENERATOR_H
 
+struct SensorFusionData;
+
 class PathGenerator {
 private:
   static const int number_of_steps_to_reuse_ = 0;
-  static const int default_path_length_ = 150;
+  static const int default_path_length_ = 100;
 
   double ref_x_;
   double ref_y_;
@@ -34,7 +36,7 @@ private:
   vector<double> fitPolynomial(vector<double> start, vector <double> end, double time_steps);
 
 public:
-  vector<PathCartesian> generatePaths(ControlState controlState, Car &car, Map &map);
+  vector<PathCartesian> generatePaths(ControlState controlState, Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data);
 
   tk::spline fitSplineWithPath(PathCartesian &path);
 
