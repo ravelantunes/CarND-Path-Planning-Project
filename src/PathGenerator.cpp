@@ -8,11 +8,13 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
-#include "Helpers.h"
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "Eigen-3.3/Eigen/LU"
 #include <iomanip>
+#include "Constants.h"
+#include "Helpers.h"
+
 
 using namespace std;
 
@@ -23,21 +25,7 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
   //Print car state
 //  car.printState();
 
-  //First, we erase some of the steps of the previous planned path
-  //The reason for that is that the simulator will usually only be able to perform about 3 steps between iterations,
-  //which wouldn't allow for the path planner to plan a full path
-  const unsigned long initial_planned_path_size = car.getCurrentPath().x_points.size();
-
-  bool already_generated_path = false;
-  if (initial_planned_path_size > 0) {
-    already_generated_path = true;
-  }
-
   PathCartesian previous_path = car.getCurrentPath();
-//  if (previous_path.x_points.size() > number_of_steps_to_reuse_) {
-//    previous_path.x_points.erase(previous_path.x_points.begin()+number_of_steps_to_reuse_, previous_path.x_points.end());
-//    previous_path.y_points.erase(previous_path.y_points.begin()+number_of_steps_to_reuse_, previous_path.y_points.end());
-//  }
 
   //Copy the remaining steps of the previous path into the new paths
   vector<double> new_path_x, new_path_y;
@@ -46,68 +34,79 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
     new_path_y.push_back(previous_path.y_points[i]);
   }
 
-  //Then, we fit a polynomial from to use to generate the paths
-  double delta_time = 0.2; //Time between each step
-  double METERS_IN_MILE = 1609.34;
-  double speed_limit = 48; //In miles
-  double speed_limit_in_meters_per_second = (speed_limit * METERS_IN_MILE) / 60 / 60;
-  double number_of_seconds = default_path_length_ * delta_time;
-  double car_speed_in_meeters_per_second = (METERS_IN_MILE * car.getSpeed() / 60 / 60);
-  double max_acceleration = 10.0;
-  double MAX_DISTANCE_LIMIT = speed_limit_in_meters_per_second * number_of_seconds / 1000;
-  double max_achievable_speed = car_speed_in_meeters_per_second + max_acceleration * number_of_seconds;
-  double max_achievable_distance = (car_speed_in_meeters_per_second + max_achievable_speed) / 2 * number_of_seconds;
-  max_achievable_distance /= 100; //I'm still not sure why it's needed
+  int previous_path_size = previous_path.x_points.size();
 
-  double final_position_goal = min(max_achievable_distance, MAX_DISTANCE_LIMIT);
+  //Length in seconds that maneuver will take
+  double number_of_seconds = default_path_length_ / UPDATES_PER_SECOND;
 
-  //Iterate each detected car from sensor fusion data
-  for (int i = 0; i < sensor_fusion_data.size(); i++) {
-    SensorFusionData detected_car = sensor_fusion_data[i];
+//  double max_distance_without_jerk = SPEED_LIMIT_IN_METERS * number_of_seconds / 1000;
 
-    // First, test if the car d positions overlap. We do that first since we can't predict if the car will change
-    // lanes, so only care about cars on the same lane of the current step. That way, we save some cycles from the
-    // s position prediction
-    if (detected_car.d < car.getD() + 2 && detected_car.d > car.getD() - 2) {
 
-      //Estimate detected car position at the step s_points_iterator
-      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
-      const double estimated_detected_s = detected_car.s + (estimated_car_speed * number_of_seconds);
 
-      double distance = estimated_detected_s - car.getS();
-      distance -= 20; //TODO: no idea why
+//  double speed_on_last_step = car.getSpeedInMeters();
+//  if (previous_path_size > 2) {
+//    speed_on_last_step = sqrt(pow(previous_path.x_points[previous_path_size-2] -previous_path.x_points[previous_path_size-1] , 2)
+//                              + pow(previous_path.y_points[previous_path_size-2] -previous_path.y_points[previous_path_size-1] , 2));
+//  }
 
-      if (distance > 0) {
-        cout << "car " << detected_car.id << ": " << distance << endl;
-        final_position_goal = min(distance/100, final_position_goal);
-        if (distance < 30) {
-          change_lane = true;
-        }
-      }
-    }
-  }
 
-  double time_steps = default_path_length_;
+//  double max_achievable_speed = speed_on_last_step + MAX_ACCELERATION * number_of_seconds;
+//  double max_achievable_distance = (car.getSpeedInMeters() + max_achievable_speed) / 2 * number_of_seconds;
+//  max_achievable_distance /= 100; //I'm still not sure why it's needed
+//  double max_achievable_distance = max_achievable_speed * number_of_seconds / 1000.0;
+
+//  double final_position_goal = min(max_achievable_distance, max_distance_without_jerk);
+
+//  cout << "remaining step count: " << remaining_steps_count << endl;
+
+//  cout << "max distance without jerk " << max_achievable_distance << endl;
+  //Search for the closest car on the same lane, so we can follow
+//  double closest_car_distance = 1000.0;
+//
+//  //Iterate each detected car from sensor fusion data
+//  for (int i = 0; i < sensor_fusion_data.size(); i++) {
+//    SensorFusionData detected_car = sensor_fusion_data[i];
+//
+//    // First, test if the car d positions overlap. We do that first since we can't predict if the car will change
+//    // lanes, so only care about cars on the same lane of the current step. That way, we save some cycles from the
+//    // s position prediction
+//    if (detected_car.d < car.getD() + 2 && detected_car.d > car.getD() - 2) {
+//
+//      //Estimate detected car position at the step s_points_iterator
+//      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
+//      const double estimated_detected_s = detected_car.s + (estimated_car_speed * 1);
+//
+//      double distance = estimated_detected_s - car.getS();
+//      if (distance > 0 && distance < closest_car_distance) {
+//        closest_car_distance = distance;
+//      }
+//
+//    }
+//  }
+//  cout << "Closest car is at " << closest_car_distance << endl;
+//  final_position_goal = min(closest_car_distance/100, final_position_goal);
+  double end_goal = KM_SPEED_LIMIT_PER_SEC * number_of_seconds;
+
   vector<double> start_s = {0, 0, 0};
-  vector<double> end_s = {min(max_achievable_distance, final_position_goal), 0, 0};
+  vector<double> end_s = {end_goal, 0, 0};
+
+  //  vector<double> end_s = {min(max_achievable_distance, final_position_goal), 0, 0};
   vector<double> end_d = {0, 0, 0};
 
-  vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, time_steps);
-  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, end_d, time_steps);
+  vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, number_of_seconds);
+  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, end_d, 1);
 
   //Iterate to create paths points until it fills up the expected number of paths
   for (auto i = new_path_x.size(); i < default_path_length_; i++) {
     //Step to be evaluated
-    double step = i+1;
+    double step = (i) * (number_of_seconds / default_path_length_);
 
     ref_s_ += EvaluatePoly(s_poly_coeffs, step);
     ref_d_ += EvaluatePoly(d_poly_coeffs, step);
     double s_point = ref_s_;
     double d_point = ref_d_;
     d_point = 6;
-    if (change_lane) {
-      d_point = 2;
-    }
+
 
     vector<double> xy_points = getXY(s_point, d_point, map.s_waypoints, map.x_waypoints, map.y_waypoints);
     new_path_x.push_back(xy_points[0]);
@@ -155,15 +154,15 @@ vector<double> PathGenerator::getRefValuesForCurrentPath(Car &car, vector<double
 }
 
 
-vector<double> PathGenerator::fitPolynomial(vector<double> start, vector <double> end, double time_steps) {
+vector<double> PathGenerator::fitPolynomial(vector<double> start, vector <double> end, double T) {
   Eigen::MatrixXd matrix_a = Eigen::MatrixXd(3, 3);
-  matrix_a << pow(time_steps, 3), pow(time_steps, 4), pow(time_steps, 5),
-      3*pow(time_steps, 2), 4*pow(time_steps,3), 5*pow(time_steps, 4),
-      6*time_steps, 12*pow(time_steps, 2), 20*pow(time_steps, 3);
+  matrix_a <<   pow(T, 3),    pow(T, 4),    pow(T, 5),
+              3*pow(T, 2),  4*pow(T,3),   5*pow(T, 4),
+              6*T,         12*pow(T, 2), 20*pow(T, 3);
 
   Eigen::MatrixXd matrix_b = Eigen::MatrixXd(3, 1);
-  matrix_b << end[0] - (start[0] + start[1] * time_steps + 0.5 * start[2] * pow(time_steps, 2)),
-      end[1] - (start[1] + start[2] * time_steps),
+  matrix_b << end[0] - (start[0] + start[1] * T + 0.5 * start[2] * pow(T, 2)),
+      end[1] - (start[1] + start[2] * T),
       end[2] - start[2];
 
   Eigen::MatrixXd matrix_a_inverse = matrix_a.inverse();

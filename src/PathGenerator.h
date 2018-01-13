@@ -6,6 +6,7 @@
 #include "Map.h"
 #include "Car.h"
 #include "ControlState.h"
+#include "spline.h"
 
 using namespace std;
 
@@ -19,7 +20,7 @@ struct SensorFusionData;
 
 class PathGenerator {
 private:
-  static const int number_of_steps_to_reuse_ = 0;
+  static const int number_of_steps_to_reuse_ = 50;
   static const int default_path_length_ = 100;
 
   double ref_x_;

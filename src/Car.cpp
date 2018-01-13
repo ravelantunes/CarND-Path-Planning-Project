@@ -49,6 +49,10 @@ double Car::getD() const { return d_; }
 
 double Car::getSpeed() const { return speed_; }
 
+double Car::getSpeedInMeters() {
+  return 1609.34 * speed_ / 60 / 60;
+}
+
 void Car::printState() {
   std::cout << "pos cartesian: " << getX() << ", " << getY();
   std::cout << "  frenet: " << getS() << ", " << getD();

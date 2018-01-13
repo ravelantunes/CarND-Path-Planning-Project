@@ -72,6 +72,8 @@ public:
 
   double getSpeed() const;
 
+  double getSpeedInMeters();
+
   void printState();
 };
 
