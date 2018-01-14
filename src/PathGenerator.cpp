@@ -38,57 +38,47 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
 
   //Length in seconds that maneuver will take
   double number_of_seconds = default_path_length_ / UPDATES_PER_SECOND;
-
-//  double max_distance_without_jerk = SPEED_LIMIT_IN_METERS * number_of_seconds / 1000;
-
-
-
-//  double speed_on_last_step = car.getSpeedInMeters();
-//  if (previous_path_size > 2) {
-//    speed_on_last_step = sqrt(pow(previous_path.x_points[previous_path_size-2] -previous_path.x_points[previous_path_size-1] , 2)
-//                              + pow(previous_path.y_points[previous_path_size-2] -previous_path.y_points[previous_path_size-1] , 2));
-//  }
-
-
-//  double max_achievable_speed = speed_on_last_step + MAX_ACCELERATION * number_of_seconds;
-//  double max_achievable_distance = (car.getSpeedInMeters() + max_achievable_speed) / 2 * number_of_seconds;
-//  max_achievable_distance /= 100; //I'm still not sure why it's needed
-//  double max_achievable_distance = max_achievable_speed * number_of_seconds / 1000.0;
-
-//  double final_position_goal = min(max_achievable_distance, max_distance_without_jerk);
-
-//  cout << "remaining step count: " << remaining_steps_count << endl;
-
-//  cout << "max distance without jerk " << max_achievable_distance << endl;
+;
   //Search for the closest car on the same lane, so we can follow
-//  double closest_car_distance = 1000.0;
-//
-//  //Iterate each detected car from sensor fusion data
-//  for (int i = 0; i < sensor_fusion_data.size(); i++) {
-//    SensorFusionData detected_car = sensor_fusion_data[i];
-//
-//    // First, test if the car d positions overlap. We do that first since we can't predict if the car will change
-//    // lanes, so only care about cars on the same lane of the current step. That way, we save some cycles from the
-//    // s position prediction
-//    if (detected_car.d < car.getD() + 2 && detected_car.d > car.getD() - 2) {
-//
-//      //Estimate detected car position at the step s_points_iterator
-//      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
-//      const double estimated_detected_s = detected_car.s + (estimated_car_speed * 1);
-//
-//      double distance = estimated_detected_s - car.getS();
-//      if (distance > 0 && distance < closest_car_distance) {
-//        closest_car_distance = distance;
-//      }
-//
-//    }
-//  }
-//  cout << "Closest car is at " << closest_car_distance << endl;
-//  final_position_goal = min(closest_car_distance/100, final_position_goal);
-  double end_goal = KM_SPEED_LIMIT_PER_SEC * number_of_seconds;
+  double closest_car_distance = 1000.0;
 
-  vector<double> start_s = {0, 0, 0};
-  vector<double> end_s = {end_goal, 0, 0};
+  //Estimate ego car position in 2 seconds (safe distance to keep from next car)
+  double closest_car_speed = 1000;
+
+  //Iterate each detected car from sensor fusion data
+  for (int i = 0; i < sensor_fusion_data.size(); i++) {
+    SensorFusionData detected_car = sensor_fusion_data[i];
+
+    // First, test if the car d positions overlap. We do that first since we can't predict if the car will change
+    // lanes, so only care about cars on the same lane of the current step. That way, we save some cycles from the
+    // s position prediction
+    if (detected_car.d < car.getD() + 2 && detected_car.d > car.getD() - 2) {
+
+      //Estimate detected car position at the step s_points_iterator
+      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
+      const double estimated_detected_s = detected_car.s + estimated_car_speed ;
+
+      double distance = estimated_detected_s - car.getS();
+
+      if (distance > 0 && distance < closest_car_distance) {
+        closest_car_distance = distance;
+        closest_car_speed = estimated_car_speed;
+      }
+
+    }
+  }
+  cout << "Closest car is at " << closest_car_distance << endl;
+
+  double distance_goal = MAX_DIST_PER_SEC;
+  double speed_goal = MPS_LIMIT/50;
+  if (closest_car_distance < CLOSEST_CAR_THRESHOLD) {
+    distance_goal = (closest_car_speed - 1) /50;
+    speed_goal = closest_car_speed/50;
+  }
+  speed_goal = min((car.getSpeedInMeters() + 10)/50, speed_goal);
+
+  vector<double> start_s = {0, car.getSpeedInMeters()/50, car.getAcceleration()};
+  vector<double> end_s = {distance_goal, speed_goal, 0.0};
 
   //  vector<double> end_s = {min(max_achievable_distance, final_position_goal), 0, 0};
   vector<double> end_d = {0, 0, 0};
@@ -107,13 +97,29 @@ vector<PathCartesian> PathGenerator::generatePaths(ControlState controlState, Ca
     double d_point = ref_d_;
     d_point = 6;
 
-
     vector<double> xy_points = getXY(s_point, d_point, map.s_waypoints, map.x_waypoints, map.y_waypoints);
-    new_path_x.push_back(xy_points[0]);
-    new_path_y.push_back(xy_points[1]);
+    double new_x = xy_points[0];
+    double new_y = xy_points[1];
+
+    //Some sanity check before inserting item
+    if (new_path_x.size() > 1) {
+      double p_x = new_path_x[new_path_x.size()-1];
+      double p_y = new_path_y[new_path_y.size()-1];
+
+      double distance = sqrt(pow(new_y-p_y, 2)+pow(new_x-p_x, 2));
+      if (distance > 0.4) {
+//        cout << distance << endl;
+//        continue;
+      }
+    }
+
+    new_path_x.push_back(new_x);
+    new_path_y.push_back(new_y);
 
     assert(new_path_x.size() == new_path_y.size());
   }
+
+//  cout << " --- " << endl;
 
   PathCartesian path = {
       .x_points = new_path_x,

@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <iostream>
+#include <cmath>
 #include "Car.h"
 
 Car::Car() {
@@ -48,6 +49,19 @@ double Car::getS() const { return s_; }
 double Car::getD() const { return d_; }
 
 double Car::getSpeed() const { return speed_; }
+
+double Car::getAcceleration() const {
+  if (getCurrentPath().x_points.size() < 2) {
+    return 0.0;
+  }
+
+  double x1 = getCurrentPath().x_points[0];
+  double x2 = getCurrentPath().x_points[1];
+  double y1 = getCurrentPath().y_points[0];
+  double y2 = getCurrentPath().y_points[1];
+
+  return std::sqrt(std::pow(y2-y1, 2) + std::pow(x2-x1, 2));
+}
 
 double Car::getSpeedInMeters() {
   return 1609.34 * speed_ / 60 / 60;
