@@ -137,13 +137,17 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
-//int LaneToD(int lane) {
-//  return (lane_size/2) + (lane - 1) * lane_size;
-//}
+int LaneToD(int lane) {
+  return (LANE_SIZE/2) + (lane - 1) * LANE_SIZE;
+}
 
-//int DToLane(double d) {
-//  return (d / lane_size) + 1;
-//}
+int DToLane(double d) {
+  return (d / LANE_SIZE) + 1;
+}
+
+int roundDLane(double d) {
+  return LaneToD(DToLane(d));
+}
 
 vector<double> GlobalToCarCoordinates(double global_x, double global_y, Car &car) {
   const double relative_x = global_x - car.getX();

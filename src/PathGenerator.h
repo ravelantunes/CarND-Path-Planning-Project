@@ -32,16 +32,14 @@ private:
 
   Map map_;
 
-  PathCartesian inferSpline(tk::spline spline, vector<double> &next_x_vals, vector<double> &next_y_vals);
-  tk::spline fitSpline(int target_lane, double target_velocity);
+//  PathCartesian inferSpline(tk::spline spline, vector<double> &next_x_vals, vector<double> &next_y_vals);
+//  tk::spline fitSpline(int target_lane, double target_velocity);
   vector<double> fitPolynomial(vector<double> start, vector <double> end, double time_steps);
+
+  int testBestLane(Car &car, vector<SensorFusionData> &sensor_fusion_data);
 
 public:
   vector<PathCartesian> generatePaths(ControlState controlState, Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data);
-
-  tk::spline fitSplineWithPath(PathCartesian &path);
-
-  vector<double> getRefValuesForCurrentPath(Car &car, vector<double> &new_path_x, vector<double> &new_path_y);
 
   PathCartesian normalizeWithSpline(PathCartesian &path, Car &car);
 };
