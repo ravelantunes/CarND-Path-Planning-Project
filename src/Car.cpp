@@ -26,11 +26,11 @@ void Car::update(const CarPosition &carPosition) {
   angle_ = carPosition.angle;
 }
 
-const PathCartesian &Car::getCurrentPath() const {
+const Path &Car::getCurrentPath() const {
   return currentPath_;
 }
 
-void Car::setCurrentPath(const PathCartesian &currentPath) {
+void Car::setCurrentPath(const Path &currentPath) {
   currentPath_ = currentPath;
 }
 

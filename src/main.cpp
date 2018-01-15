@@ -98,7 +98,8 @@ int main() {
           auto sensor_fusion = j[1]["sensor_fusion"];
 
           json msgJson;
-          PathCartesian previous_path = {previous_path_x, previous_path_y};
+          Path previous_path = {previous_path_x, previous_path_y};
+
           Map map = {map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy};
 
           //Update the car position with the last received values from socket
@@ -116,8 +117,9 @@ int main() {
             sensor_fusion_data.push_back(detected_car);
           }
 
-          vector<PathCartesian> paths = pathGenerator.generatePaths(KEEP_LANE, car, map, sensor_fusion_data);
-          PathCartesian best_path = paths[0];
+          pathGenerator.setState(car, map, sensor_fusion_data, end_path_s, end_path_d);
+          vector<Path> paths = pathGenerator.generatePaths();
+          Path best_path = paths[0];
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           msgJson["next_x"] = best_path.x_points;

@@ -31,7 +31,7 @@ private:
 
   Map map_;
 
-  PathCartesian currentPath_;
+  Path currentPath_;
 
 public:
   Car();
@@ -66,9 +66,9 @@ public:
 
   void update(const CarPosition &carPosition);
 
-  const PathCartesian &getCurrentPath() const;
+  const Path &getCurrentPath() const;
 
-  void setCurrentPath(const PathCartesian &currentPath);
+  void setCurrentPath(const Path &currentPath);
 
   double getSpeed() const;
 

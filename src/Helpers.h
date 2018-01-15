@@ -157,7 +157,7 @@ vector<double> GlobalToCarCoordinates(double global_x, double global_y, Car &car
   return {translated_x, translated_y};
 }
 
-PathFrenet ConvertXYPathToFrenet(Car &car, PathCartesian &path, Map &map) {
+Path ConvertXYPathToFrenet(Car &car, Path &path, Map &map) {
   //Calculate path to frenet
   double last_x = car.getX();
   double last_y = car.getY();
@@ -174,7 +174,10 @@ PathFrenet ConvertXYPathToFrenet(Car &car, PathCartesian &path, Map &map) {
     d_points.push_back(frenet_point[1]);
   }
 
-  return {s_points, d_points};
+  Path final_path;
+  path.s_points = s_points;
+  path.d_points = d_points;
+  return final_path;
 }
 
 double EvaluatePoly(vector<double> coeffs, double x) {
