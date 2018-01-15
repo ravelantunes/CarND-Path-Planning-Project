@@ -117,7 +117,7 @@ int main() {
             sensor_fusion_data.push_back(detected_car);
           }
 
-          pathGenerator.setState(car, map, sensor_fusion_data, end_path_s, end_path_d);
+          pathGenerator.setState(car, map, sensor_fusion_data);
           vector<Path> paths = pathGenerator.generatePaths();
           Path best_path = paths[0];
 

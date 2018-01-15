@@ -38,6 +38,7 @@ private:
 
   int testBestLane();
 
+  Path generateInitialPath();
   Path generateFollowPath();
   Path generateLaneChangePath();
 
@@ -46,7 +47,7 @@ private:
   bool testPathFeasibility(Path &path);
   double scorePath(Path &path);
 public:
-  void setState(Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data, double ref_s, double ref_d);
+  void setState(Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data);
 
   vector<Path> generatePaths();
 

@@ -5,13 +5,9 @@
 #include "PathStructs.h"
 #include "PathGenerator.h"
 #include "SensorFusionData.h"
-#include <vector>
-#include <iostream>
-#include <cmath>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "Eigen-3.3/Eigen/LU"
-#include <iomanip>
 #include "Constants.h"
 #include "Helpers.h"
 
@@ -20,20 +16,21 @@ using namespace std;
 
 bool change_lane = false;
 
-void PathGenerator::setState(Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data, double ref_s, double ref_d) {
+void PathGenerator::setState(Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data) {
   this->car_ = car;
   this->map_ = map;
   this->sensor_fusion_data_ = sensor_fusion_data;
-  this->ref_s_ = ref_s;
-  this->ref_d_ = ref_d;
 }
 
 vector<Path> PathGenerator::generatePaths() {
-
-  //Print car state
-//  car.printState();
-
   vector<Path> paths;
+
+  //If not previous path exists, populate the initial path with some small acceleration
+  if (car_.getCurrentPath().x_points.size() < 2) {
+    paths.push_back(generateInitialPath());
+    return paths;
+  }
+
   paths.push_back(generateFollowPath());
 //  paths.push_back(generateLaneChangePath());
 
@@ -46,6 +43,37 @@ vector<Path> PathGenerator::generatePaths() {
   }
 
   return paths;
+}
+
+Path PathGenerator::generateInitialPath() {
+
+  vector<double> path_x, path_y;
+
+  double ref_x = car_.getX();
+  double ref_y = car_.getY();
+  double ref_angle = car_.getAngle();
+
+  for (int i = 0; i < default_path_length_; i++) {
+    double initial_accel = 0.1 / 50 * i;
+
+    ref_x += initial_accel * cos(ref_angle);
+    ref_y += initial_accel * sin(ref_angle);
+
+    path_x.push_back(ref_x);
+    path_y.push_back(ref_y);
+
+    int size = path_x.size();
+    if (size > 2) {
+      ref_angle = atan2(ref_y - path_y[size-1], ref_x - path_x[size-1]);
+    }
+    assert(path_x.size() == path_y.size());
+  }
+
+  //Set initial ref s and d based on last waypoint
+  ref_s_ = getFrenet(ref_x, ref_y, ref_angle, map_.x_waypoints, map_.y_waypoints)[0];
+  ref_d_ = roundDLane(car_.getD());
+
+  return {path_x, path_y};
 }
 
 Path PathGenerator::generateFollowPath() {
@@ -84,7 +112,6 @@ Path PathGenerator::generateFollowPath() {
         closest_car_distance = distance;
         closest_car_speed = estimated_car_speed;
       }
-
     }
   }
 
@@ -95,13 +122,11 @@ Path PathGenerator::generateFollowPath() {
     speed_goal = closest_car_speed/50;
   }
 
+  //This prevents the car from accelerating too fast
   speed_goal = min((car_.getSpeedInMeters() + 10)/50, speed_goal);
 
-//  vector<double> start_s = {0, car_.getSpeedInMeters()/50, car_.getAcceleration()};
-//  vector<double> end_s = {distance_goal, speed_goal, 0.0};
-
-  vector<double> start_s = {0, 0, car_.getAcceleration()};
-  vector<double> end_s = {0.44, 0, 0};
+  vector<double> start_s = {0, car_.getSpeedInMeters()/50, car_.getAcceleration()};
+  vector<double> end_s = {distance_goal, speed_goal, 0.0};
 
   vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, number_of_seconds);
   vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, number_of_seconds);
@@ -177,7 +202,7 @@ Path PathGenerator::generateLaneChangePath() {
   vector<double> d_poly_coeffs = fitPolynomial(start_d, end_d, number_of_seconds);
 
   Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds);
-  path = normalizeWithSpline(path);
+//  path = normalizeWithSpline(path);
   return path;
 }
 
@@ -221,33 +246,15 @@ int PathGenerator::testBestLane() {
 }
 
 Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vector<double> d_coeffs, vector<double> path_x, vector<double> path_y, double T) {
-  double ref_s = ref_s_;
-  double ref_d = ref_d_;
-
   //Iterate to create paths points until it fills up the expected number of paths
   for (auto i = path_x.size(); i < default_path_length_; i++) {
     //Step to be evaluated
-    double step = (i) * (T / default_path_length_);
+    double step = i * T / default_path_length_;
 
     double s_delta = EvaluatePoly(s_coeffs, step);
-    if (car_.getS() > 200) {
-      s_delta = 0.4444444;
-    }
-//    s_delta = 0.44;
-    cout << s_delta << endl;
-    ref_s += s_delta;
-//    ref_s += EvaluatePoly(s_coeffs, step);
-//    ref_d += EvaluatePoly(d_coeffs, step);
-//    double s_point = ref_s;
-//    double d_point = ref_d;
+    ref_s_ += s_delta;
 
-//    cout << "car s: " << car_.getS() << "  refD: " << ref_d<< endl;
-//    if (car_.getS() < 150) {
-//      d_point = 6;
-//    }
-    ref_d = 6;
-
-    vector<double> xy_points = getXY(ref_s, ref_d, map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
+    vector<double> xy_points = getXY(ref_s_, roundDLane(car_.getD()), map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
     double new_x = xy_points[0];
     double new_y = xy_points[1];
 
@@ -290,7 +297,7 @@ Path PathGenerator::normalizeWithSpline(Path &path) {
 
   //Convert path into local coordinates
   vector<double> local_x, local_y;
-  for (int i = 0; i < path.x_points.size(); i++) {
+  for (int i = 0; i < path.x_points.size(); i ++) {
     vector<double> local_coords = GlobalToCarCoordinates(path.x_points[i], path.y_points[i], car_);
     local_x.push_back(local_coords[0]);
     local_y.push_back(local_coords[1]);
@@ -298,9 +305,7 @@ Path PathGenerator::normalizeWithSpline(Path &path) {
 
   //Fit spline with local coordinates
   vector<double> s_y, s_x, time_step;
-  int counter_of_spline_points = 0;
-  for (int i = 0; i < path.x_points.size(); i+=30) {
-    counter_of_spline_points++;
+  for (int i = 0; i < path.x_points.size(); i+=15) {
     s_x.push_back(local_x[i]);
     s_y.push_back(local_y[i]);
     time_step.push_back((double)i);
