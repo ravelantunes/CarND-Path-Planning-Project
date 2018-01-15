@@ -116,10 +116,14 @@ Path PathGenerator::generateFollowPath() {
     }
   }
 
+  if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 25) {
+    return generateLaneChangePath();
+  }
+
   //Balance between a follow speed and a max speed
   double weight = min(max(CLOSEST_CAR_THRESHOLD/closest_car_distance, 0.0), 1.0);
   double next_car_goal = (closest_car_speed - 1) /50;;
-  double distance_goal = next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight);
+  double distance_goal = min(next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight), MAX_DIST_PER_SEC);
 
   vector<double> start_s = {0, 0, 0};
   vector<double> end_s = {distance_goal, 0, -1.0};
@@ -174,20 +178,17 @@ Path PathGenerator::generateLaneChangePath() {
 
     }
   }
-//  cout << "Closest car is at " << closest_car_distance << endl;
+  cout << "Closest car is at " << closest_car_distance << endl;
 
   double distance_goal = MAX_DIST_PER_SEC;
-  double speed_goal = MPS_LIMIT/50;
   if (closest_car_distance < CLOSEST_CAR_THRESHOLD) {
-    distance_goal = (closest_car_speed - 1) /50;
-    speed_goal = closest_car_speed/50;
+    distance_goal = min((closest_car_speed - 10) /50, MAX_DIST_PER_SEC);
   }
 
   int best_lane = LaneToD(testBestLane());
-  speed_goal = min((car_.getSpeedInMeters() + 10)/50, speed_goal);
 
-  vector<double> start_s = {0, car_.getSpeedInMeters()/50, car_.getAcceleration()};
-  vector<double> end_s = {distance_goal, speed_goal, 0.0};
+  vector<double> start_s = {0, 0, 0};
+  vector<double> end_s = {distance_goal, 0, 0};
 
   vector<double> start_d = {0, 0, 0};
   vector<double> end_d = {(best_lane-car_.getD())/150, 0, 0};
@@ -198,12 +199,12 @@ Path PathGenerator::generateLaneChangePath() {
   vector<double> d_poly_coeffs = fitPolynomial(start_d, end_d, number_of_seconds);
 
   Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds);
-//  path = normalizeWithSpline(path);
+  path = normalizeWithSpline(path);
   return path;
 }
 
 int PathGenerator::testBestLane() {
-  vector<double> lanes_free_length(3);
+  vector<double> lanes_free_length = {10000, 10000, 10000};
 
   for (int i = 0; i < sensor_fusion_data_.size(); i++) {
     SensorFusionData detected_car = sensor_fusion_data_[i];
@@ -215,15 +216,22 @@ int PathGenerator::testBestLane() {
     }
 
     double best_lane_distance = lanes_free_length[lane];
-    double distance = detected_car.s - car_.getS();
+
+    //Reset distance to 0 if first distance. The initialized 1000 value is in case no car in lane
+    //to set initial value
+    if (best_lane_distance > 9999) {
+      best_lane_distance = 0;
+    }
+
+    double distance = detected_car.s - car_.getS();//+20 to include negative  values
     if (distance > best_lane_distance) {
       lanes_free_length[lane] = distance;
     }
   }
 
-//  cout << "lane1: " << lanes_free_length[0];
-//  cout << "   lane2: " << lanes_free_length[1];
-//  cout << "   lane3: " << lanes_free_length[2] << endl;
+  cout << "lane1: " << lanes_free_length[0];
+  cout << "   lane2: " << lanes_free_length[1];
+  cout << "   lane3: " << lanes_free_length[2] << endl;
 
   //Ugly
   if (lanes_free_length[0] > lanes_free_length[1]) {
@@ -248,9 +256,11 @@ Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vecto
     double step = i * T / default_path_length_;
 
     double s_delta = EvaluatePoly(s_coeffs, step);
+    double d_delta = EvaluatePoly(d_coeffs, step);
     ref_s_ += s_delta;
+    ref_d_ += d_delta;
 
-    vector<double> xy_points = getXY(ref_s_, roundDLane(car_.getD()), map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
+    vector<double> xy_points = getXY(ref_s_, ref_d_, map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
     double new_x = xy_points[0];
     double new_y = xy_points[1];
 
