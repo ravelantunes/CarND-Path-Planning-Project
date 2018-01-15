@@ -17,7 +17,7 @@ static const double KM_SPEED_LIMIT = MPH_SPEED_LIMIT * 1.60934;
 static const double MPS_LIMIT = KM_SPEED_LIMIT/60/60*1000;
 static const double MAX_DIST_PER_SEC = MPS_LIMIT/50;
 static const double MAX_ACCELERATION = 10.0;
-static const double CLOSEST_CAR_THRESHOLD = 45;
+static const double CLOSEST_CAR_THRESHOLD = 30;
 
 
 #endif //PATH_PLANNING_CONSTANTS_H

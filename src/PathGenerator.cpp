@@ -1,6 +1,7 @@
 //
 // Created by Ravel Antunes on 11/3/17.
 //
+#include <iostream>
 #include "spline.h"
 #include "PathStructs.h"
 #include "PathGenerator.h"
@@ -115,18 +116,13 @@ Path PathGenerator::generateFollowPath() {
     }
   }
 
-  double distance_goal = MAX_DIST_PER_SEC;
-  double speed_goal = MPS_LIMIT/50;
-  if (closest_car_distance < CLOSEST_CAR_THRESHOLD) {
-    distance_goal = (closest_car_speed - 1) /50;
-    speed_goal = closest_car_speed/50;
-  }
+  //Balance between a follow speed and a max speed
+  double weight = min(max(CLOSEST_CAR_THRESHOLD/closest_car_distance, 0.0), 1.0);
+  double next_car_goal = (closest_car_speed - 1) /50;;
+  double distance_goal = next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight);
 
-  //This prevents the car from accelerating too fast
-  speed_goal = min((car_.getSpeedInMeters() + 10)/50, speed_goal);
-
-  vector<double> start_s = {0, car_.getSpeedInMeters()/50, car_.getAcceleration()};
-  vector<double> end_s = {distance_goal, speed_goal, 0.0};
+  vector<double> start_s = {0, 0, 0};
+  vector<double> end_s = {distance_goal, 0, -1.0};
 
   vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, number_of_seconds);
   vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, number_of_seconds);
@@ -305,7 +301,7 @@ Path PathGenerator::normalizeWithSpline(Path &path) {
 
   //Fit spline with local coordinates
   vector<double> s_y, s_x, time_step;
-  for (int i = 0; i < path.x_points.size(); i+=15) {
+  for (int i = 0; i < path.x_points.size(); i+=30) {
     s_x.push_back(local_x[i]);
     s_y.push_back(local_y[i]);
     time_step.push_back((double)i);
