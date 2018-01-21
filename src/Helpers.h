@@ -146,6 +146,8 @@ int DToLane(double d) {
 }
 
 int roundDLane(double d) {
+  double lane = DToLane(d);
+  lane = min(max(lane, 1.0), 3.0);
   return LaneToD(DToLane(d));
 }
 

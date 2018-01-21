@@ -35,13 +35,13 @@ vector<Path> PathGenerator::generatePaths() {
   paths.push_back(generateFollowPath());
 //  paths.push_back(generateLaneChangePath());
 
-  vector<Path>feasiblePaths;
-  for (int i = 0; i < paths.size(); i++) {
-    Path path = paths[i];
-    if (testPathFeasibility(path)) {
-      feasiblePaths.push_back(path);
-    }
-  }
+//  vector<Path>feasiblePaths;
+//  for (int i = 0; i < paths.size(); i++) {
+//    Path path = paths[i];
+//    if (testPathFeasibility(path)) {
+//      feasiblePaths.push_back(path);
+//    }
+//  }
 
   return paths;
 }
@@ -117,19 +117,32 @@ Path PathGenerator::generateFollowPath() {
   }
 
   if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 25) {
-    return generateLaneChangePath();
+    //Cache ref s and d since the path might modify it
+    double cached_ref_s = ref_s_;
+    double cached_ref_d = ref_d_;
+    Path laneChangePath = generateLaneChangePath();
+    if (testPathFeasibility(laneChangePath)) {
+      return laneChangePath;
+    }
+
+    ref_s_ = cached_ref_s;
+    ref_d_ = cached_ref_d;
+    cout << "PREVENTING LANE CHANGE" << endl;
   }
 
   //Balance between a follow speed and a max speed
   double weight = min(max(CLOSEST_CAR_THRESHOLD/closest_car_distance, 0.0), 1.0);
   double next_car_goal = (closest_car_speed - 1) /50;;
   double distance_goal = min(next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight), MAX_DIST_PER_SEC);
-
-  vector<double> start_s = {0, 0, 0};
   vector<double> end_s = {distance_goal, 0, -1.0};
 
-  vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, number_of_seconds);
-  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, {0, 0, 0}, number_of_seconds);
+  //Calculate lane corrections if needed
+  double lane_center = roundDLane(car_.getD());
+  double lane_correction = lane_center - car_.getD();
+  vector<double> end_d = {lane_correction / default_path_length_, 0, 0};
+
+  vector<double> s_poly_coeffs = fitPolynomial({0, 0, 0}, end_s, number_of_seconds);
+  vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, end_d, number_of_seconds);
 
   Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds);
   path = normalizeWithSpline(path);
@@ -191,7 +204,7 @@ Path PathGenerator::generateLaneChangePath() {
   vector<double> end_s = {distance_goal, 0, 0};
 
   vector<double> start_d = {0, 0, 0};
-  vector<double> end_d = {(best_lane-car_.getD())/150, 0, 0};
+  vector<double> end_d = {(best_lane-car_.getD())/default_path_length_, 0, 0};
 
 //  cout << "car d : " << car.getD() << "   target lane:" << rounded_car_d << endl;
 
@@ -283,12 +296,36 @@ bool PathGenerator::testPathFeasibility(Path &path) {
   for (int i = 0; i < path.x_points.size(); i++) {
     double x = path.x_points[i];
     double y = path.x_points[i];
+    double theta = car_.getAngle();
+    if (i > 0) {
+      theta = atan2(y - path.y_points[i-1], x - path.x_points[i-1]);
+    }
 
-    for (int d = 0; d < sensor_fusion_data_.size(); d++) {
-      SensorFusionData detected_car = sensor_fusion_data_[d];
+    vector<double> car_in_frenet = getFrenet(x, y, theta, map_.x_waypoints, map_.y_waypoints);
+    double s = car_in_frenet[0];
+    double d = car_in_frenet[1];
 
-      const double estimated_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
-      const double estimated_detected_s = detected_car.s + (estimated_car_speed/50) * i;
+    //For each step, check if a car overlaps with the position
+    for (int j = 0; j < sensor_fusion_data_.size(); j++) {
+      SensorFusionData detected_car = sensor_fusion_data_[j];
+
+      const double estimated_detected_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2));
+      const double estimated_detected_s = detected_car.s + estimated_detected_car_speed * i;
+
+      double detected_car_front = estimated_detected_s + CAR_LENGTH;
+      double detected_car_rear = estimated_detected_s - CAR_LENGTH;
+
+      double ego_car_front = s + CAR_LENGTH;
+      double ego_car_rear = s - CAR_LENGTH;
+
+      if (abs(d - detected_car.d) > 5 &&
+          (ego_car_front > detected_car_rear && ego_car_front < detected_car_front
+          || ego_car_rear > detected_car_rear && ego_car_rear < detected_car_front)) {
+        cout << "unfeaseble path with detected car " << detected_car.id;
+        cout << "  " << estimated_detected_s << ", " << detected_car.d << endl;
+        cout << "   ego position: " << s << ", " << d << endl;
+        return false;
+      }
     }
   }
 
