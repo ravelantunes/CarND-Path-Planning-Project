@@ -37,6 +37,7 @@ int main() {
   uWS::Hub h;
 
   Car car;
+  car.setControlState(KEEP_LANE);
   PathGenerator pathGenerator;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
@@ -119,11 +120,29 @@ int main() {
 
           pathGenerator.setState(car, map, sensor_fusion_data);
           vector<Path> paths = pathGenerator.generatePaths();
-          Path best_path = paths[0];
+
+          //Select best path and set ref s,d as the last s,d of path
+          Path *best_path = nullptr;
+          for (int i = 0; i < paths.size(); i++) {
+            if (best_path == nullptr) {
+              best_path = &paths[i];
+              continue;
+            }
+
+            if (paths[i].cost < best_path->cost) {
+              best_path = &paths[i];
+            }
+          }
+
+          pathGenerator.setLastRefs(best_path->last_s, best_path->last_d);
+          if (best_path->next_state) {
+            car.setControlState(best_path->next_state);
+          }
+
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          msgJson["next_x"] = best_path.x_points;
-          msgJson["next_y"] = best_path.y_points;
+          msgJson["next_x"] = best_path->x_points;
+          msgJson["next_y"] = best_path->y_points;
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
 

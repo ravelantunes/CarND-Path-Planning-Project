@@ -23,6 +23,11 @@ void PathGenerator::setState(Car &car, Map &map, vector<SensorFusionData> &senso
   this->sensor_fusion_data_ = sensor_fusion_data;
 }
 
+void PathGenerator::setLastRefs(const double s, const double d) {
+  this->ref_s_= s;
+  this->ref_d_ = d;
+}
+
 vector<Path> PathGenerator::generatePaths() {
   vector<Path> paths;
 
@@ -32,7 +37,20 @@ vector<Path> PathGenerator::generatePaths() {
     return paths;
   }
 
-  paths.push_back(generateFollowPath());
+  if (car_.getControlState() == KEEP_LANE) {
+    for (int i = 0; i < 20; i++) {
+      paths.push_back(generateFollowPath());
+    }
+  }
+
+  if (car_.getControlState() == CHANGE_LANES) {
+    paths.push_back(generateLaneChangePath());
+  }
+
+
+  for (int i = 0; i < paths.size(); i++) {
+    scorePath(paths[i]);
+  }
 //  paths.push_back(generateLaneChangePath());
 
 //  vector<Path>feasiblePaths;
@@ -71,10 +89,18 @@ Path PathGenerator::generateInitialPath() {
   }
 
   //Set initial ref s and d based on last waypoint
-  ref_s_ = getFrenet(ref_x, ref_y, ref_angle, map_.x_waypoints, map_.y_waypoints)[0];
-  ref_d_ = roundDLane(car_.getD());
+  double s = getFrenet(ref_x, ref_y, ref_angle, map_.x_waypoints, map_.y_waypoints)[0];
+  double d = roundDLane(car_.getD());
 
-  return {path_x, path_y};
+  Path path = {
+      .x_points = path_x,
+      .y_points = path_y,
+      .s_points = {},
+      .d_points = {},
+      .last_s = s,
+      .last_d = d
+  };
+  return path;
 }
 
 Path PathGenerator::generateFollowPath() {
@@ -116,24 +142,15 @@ Path PathGenerator::generateFollowPath() {
     }
   }
 
-  if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 25) {
-    //Cache ref s and d since the path might modify it
-    double cached_ref_s = ref_s_;
-    double cached_ref_d = ref_d_;
-    Path laneChangePath = generateLaneChangePath();
-    if (testPathFeasibility(laneChangePath)) {
-      return laneChangePath;
-    }
-
-    ref_s_ = cached_ref_s;
-    ref_d_ = cached_ref_d;
-    cout << "PREVENTING LANE CHANGE" << endl;
-  }
-
   //Balance between a follow speed and a max speed
   double weight = min(max(CLOSEST_CAR_THRESHOLD/closest_car_distance, 0.0), 1.0);
   double next_car_goal = (closest_car_speed - 1) /50;;
   double distance_goal = min(next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight), MAX_DIST_PER_SEC);
+
+  //Add some variation
+  double variation = (rand() % 40 + 60) / 100.0;
+  distance_goal *= variation;
+
   vector<double> end_s = {distance_goal, 0, -1.0};
 
   //Calculate lane corrections if needed
@@ -144,8 +161,12 @@ Path PathGenerator::generateFollowPath() {
   vector<double> s_poly_coeffs = fitPolynomial({0, 0, 0}, end_s, number_of_seconds);
   vector<double> d_poly_coeffs = fitPolynomial({0, 0, 0}, end_d, number_of_seconds);
 
-  Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds);
-  path = normalizeWithSpline(path);
+  Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds, ref_s_, ref_d_);
+  normalizeWithSpline(path);
+
+  if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 25) {
+    path.next_state = CHANGE_LANES;
+  }
 
   return path;
 }
@@ -204,15 +225,14 @@ Path PathGenerator::generateLaneChangePath() {
   vector<double> end_s = {distance_goal, 0, 0};
 
   vector<double> start_d = {0, 0, 0};
-  vector<double> end_d = {(best_lane-car_.getD())/default_path_length_, 0, 0};
-
-//  cout << "car d : " << car.getD() << "   target lane:" << rounded_car_d << endl;
+  vector<double> end_d = {(best_lane-ref_d_)/default_path_length_, 0, 0};
 
   vector<double> s_poly_coeffs = fitPolynomial(start_s, end_s, number_of_seconds);
   vector<double> d_poly_coeffs = fitPolynomial(start_d, end_d, number_of_seconds);
 
-  Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds);
-  path = normalizeWithSpline(path);
+  Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds, ref_s_, ref_d_);
+  normalizeWithSpline(path);
+
   return path;
 }
 
@@ -262,7 +282,7 @@ int PathGenerator::testBestLane() {
   }
 }
 
-Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vector<double> d_coeffs, vector<double> path_x, vector<double> path_y, double T) {
+Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vector<double> d_coeffs, vector<double> path_x, vector<double> path_y, double T, double ref_s, double ref_d) {
   //Iterate to create paths points until it fills up the expected number of paths
   for (auto i = path_x.size(); i < default_path_length_; i++) {
     //Step to be evaluated
@@ -270,10 +290,10 @@ Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vecto
 
     double s_delta = EvaluatePoly(s_coeffs, step);
     double d_delta = EvaluatePoly(d_coeffs, step);
-    ref_s_ += s_delta;
-    ref_d_ += d_delta;
+    ref_s += s_delta;
+    ref_d += d_delta;
 
-    vector<double> xy_points = getXY(ref_s_, ref_d_, map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
+    vector<double> xy_points = getXY(ref_s, ref_d, map_.s_waypoints, map_.x_waypoints, map_.y_waypoints);
     double new_x = xy_points[0];
     double new_y = xy_points[1];
 
@@ -284,8 +304,12 @@ Path PathGenerator::cartesianPathFromCoefficients(vector<double> s_coeffs, vecto
   }
 
   Path path = {
-          .x_points = path_x,
-          .y_points = path_y
+      .x_points = path_x,
+      .y_points = path_y,
+      .s_points = {},
+      .d_points = {},
+      .last_s = ref_s,
+      .last_d = ref_d
   };
   return path;
 }
@@ -327,16 +351,72 @@ bool PathGenerator::testPathFeasibility(Path &path) {
         return false;
       }
     }
+
+    if (i == 0) {
+      continue;
+    }
+
+    //Now test if we don't violate certain limits
+    double prev_x = path.x_points[i-1];
+    double prev_y = path.x_points[i-1];
+
+    double distance = sqrt(pow(prev_x-x, 2) + pow(prev_y-y, 2));
   }
 
   return true;
 }
 
-double PathGenerator::scorePath(Path &path) {
-    return 0.0;
+void PathGenerator::scorePath(Path &path) {
+
+  double cost = 0.0;
+  const double DISTANCE_WEIGHT = 1.0;
+  const double MAX_ACCEL_WEIGHT = 1.0;
+  const double ACCEL_INTEGRAL_WEIGHT = 1200.0;
+
+  double distance = 0;
+  double previous_distance = 0;
+  double max_accel = 0;
+  double accel_integral = 0;
+  for (int i = 1; i < path.x_points.size(); i++) {
+    double const prev_x = path.x_points[i-1];
+    double const prev_y = path.y_points[i-1];
+    double const x = path.x_points[i];
+    double const y = path.y_points[i];
+    double step_distance = sqrt(pow(prev_y-y, 2) + pow(prev_x-x, 2));
+    distance += step_distance;
+
+    //Calculate acceleration
+    double accel = abs(step_distance - previous_distance);
+    if (accel > 0.15) {
+      accel_integral += abs(accel);
+    }
+    if (previous_distance > 0 && max_accel < accel) {
+      max_accel = accel;
+    }
+
+    //cache current distance on previous distance to use on next iteration
+    previous_distance = step_distance;
+  }
+
+  if (max_accel > 0.0040) {
+    cost += 1000;
+    cout << "ACCEL TOO BIG!!" << endl;
+  }
+
+  double distance_factor = (60.0 - distance) * DISTANCE_WEIGHT;
+  double max_accel_factor = max_accel * MAX_ACCEL_WEIGHT;
+  double accel_integral_factor = pow(accel_integral, 2) * ACCEL_INTEGRAL_WEIGHT;
+
+  cost += distance_factor;
+
+  cout << "distance: " << distance_factor;
+  cout << "    max accel: " << max_accel_factor;
+  cout << "  total accel: " << accel_integral_factor << endl;
+
+  path.cost = cost;
 }
 
-Path PathGenerator::normalizeWithSpline(Path &path) {
+void PathGenerator::normalizeWithSpline(Path &path) {
 
   //Convert path into local coordinates
   vector<double> local_x, local_y;
@@ -382,13 +462,6 @@ Path PathGenerator::normalizeWithSpline(Path &path) {
     path.x_points[i] = translated_x;
     path.y_points[i] = translated_y;
   }
-
-  Path new_path = {
-      path.x_points,
-      path.y_points
-  };
-
-  return new_path;
 }
 
 vector<double> PathGenerator::fitPolynomial(vector<double> start, vector <double> end, double T) {

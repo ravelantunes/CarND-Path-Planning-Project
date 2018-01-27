@@ -50,6 +50,11 @@ double Car::getD() const { return d_; }
 
 double Car::getSpeed() const { return speed_; }
 
+void Car::setControlState(const ControlState controlState) {
+  this->control_state_ = controlState;
+}
+ControlState Car::getControlState() const { return control_state_; }
+
 double Car::getAcceleration() const {
   if (getCurrentPath().x_points.size() < 2) {
     return 0.0;

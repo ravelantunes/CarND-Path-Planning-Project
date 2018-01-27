@@ -42,16 +42,18 @@ private:
   Path generateFollowPath();
   Path generateLaneChangePath();
 
-  Path cartesianPathFromCoefficients(vector<double> s_coeffs, vector<double> d_coeffs, vector<double> path_x, vector<double> path_y, double T);
+  Path cartesianPathFromCoefficients(vector<double> s_coeffs, vector<double> d_coeffs, vector<double> path_x, vector<double> path_y, double T, double ref_s, double ref_d);
 
   bool testPathFeasibility(Path &path);
-  double scorePath(Path &path);
+  void scorePath(Path &path);
 public:
   void setState(Car &car, Map &map, vector<SensorFusionData> &sensor_fusion_data);
 
   vector<Path> generatePaths();
 
-  Path normalizeWithSpline(Path &path);
+  void normalizeWithSpline(Path &path);
+
+  void setLastRefs(const double s, const double d);
 };
 
 #endif //PATH_PLANNING_PATHGENERATOR_H

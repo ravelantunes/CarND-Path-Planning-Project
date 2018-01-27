@@ -7,6 +7,7 @@
 
 #include "Map.h"
 #include "PathStructs.h"
+#include "ControlState.h"
 
 struct CarPosition {
   double x;
@@ -28,6 +29,7 @@ private:
   double s_;
   double d_;
   double speed_;
+  ControlState control_state_;
 
   Map map_;
 
@@ -63,6 +65,7 @@ public:
 
 
   void setMap(const Map map);
+  void setControlState(const ControlState controlState);
 
   void update(const CarPosition &carPosition);
 
@@ -75,6 +78,8 @@ public:
   double getAcceleration() const;
 
   double getSpeedInMeters();
+
+  ControlState getControlState() const;
 
   void printState();
 };

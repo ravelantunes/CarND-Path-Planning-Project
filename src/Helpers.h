@@ -182,6 +182,10 @@ Path ConvertXYPathToFrenet(Car &car, Path &path, Map &map) {
   return final_path;
 }
 
+vector<double> stepAtIndex(vector<double> x_points, vector<double> y_points, size_t index) {
+  return {x_points[index], y_points[index]};
+}
+
 double EvaluatePoly(vector<double> coeffs, double x) {
   double value = 0;
   for (unsigned int c = 0; c < coeffs.size(); c++) {
