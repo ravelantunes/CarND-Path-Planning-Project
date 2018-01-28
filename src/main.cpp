@@ -139,7 +139,6 @@ int main() {
             car.setControlState(best_path->next_state);
           }
 
-
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           msgJson["next_x"] = best_path->x_points;
           msgJson["next_y"] = best_path->y_points;
