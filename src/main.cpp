@@ -135,7 +135,6 @@ int main() {
           }
 
           pathGenerator.setLastRefs(best_path->last_s, best_path->last_d);
-          if (best_path->next_state)
           car.setControlState(best_path->next_state);
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds

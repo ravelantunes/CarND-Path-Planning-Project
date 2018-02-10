@@ -54,21 +54,15 @@ vector<Path> PathGenerator::generatePaths() {
 
   if (car_.getControlState() == KEEP_LANE || paths.size() == 0) {
     for (int i = 0; i < 1; i++) {
+      //No need to test path feasibility, since that's the fallback state
       Path path = generateFollowPath();
-      if (testPathFeasibility(path)) {
-        paths.push_back(generateFollowPath());
-      }
+      paths.push_back(generateFollowPath());
     }
   }
 
   //Do scoring
   for (int i = 0; i < paths.size(); i++) {
     scorePath(paths[i]);
-  }
-
-  if (paths.size() == 0) {
-    cout << "NO PATH AVAILABLE! ADDING EMERGENCY PATH" << endl;
-    paths.push_back(generateFollowPath());
   }
 
   return paths;
@@ -127,8 +121,8 @@ Path PathGenerator::generateFollowPath() {
   double number_of_seconds = default_path_length_ / UPDATES_PER_SECOND;
 
   //Search for the closest car on the same lane, so we can follow
-  double closest_car_distance = 1000.0;
-  double closest_car_speed = 1000;
+  double closest_car_distance = 10000.0;
+  double closest_car_speed = 10000.0;
 
   //Iterate each detected car from sensor fusion data
   for (int i = 0; i < sensor_fusion_data_.size(); i++) {
@@ -155,6 +149,7 @@ Path PathGenerator::generateFollowPath() {
   //Balance between a follow speed and a max speed
   double weight = min(max(CLOSEST_CAR_THRESHOLD/closest_car_distance, 0.0), 1.0);
   weight *= weight;
+//  cout << "closest car in front distance: " << closest_car_distance << " (weight: " << weight << ")" << endl;
 
   double next_car_goal = (closest_car_speed) / 50;
   double distance_goal = min(next_car_goal * weight + MAX_DIST_PER_SEC * (1-weight), MAX_DIST_PER_SEC);
@@ -177,11 +172,6 @@ Path PathGenerator::generateFollowPath() {
 
   double goal_speed = last_speed1 - 50/(50*60*60/1600);
 
-  //Add some variation
-  int variation_amount = 1;
-  double variation = (rand() % variation_amount + (100-variation_amount)) / 100.0;
-  distance_goal *= variation;
-
   vector<double> end_s = {distance_goal, goal_speed, -last_accel};
 
   //Calculate lane corrections if needed
@@ -195,7 +185,7 @@ Path PathGenerator::generateFollowPath() {
   Path path = cartesianPathFromCoefficients(s_poly_coeffs, d_poly_coeffs, new_path_x, new_path_y, number_of_seconds, ref_s_, ref_d_);
   normalizeWithSpline(path);
 
-  if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 25) {
+  if (closest_car_distance < CLOSEST_CAR_THRESHOLD + 50) {
     path.next_state = PREPARE_LANE_CHANGE;
   } else {
     path.next_state = KEEP_LANE;
@@ -403,9 +393,8 @@ bool PathGenerator::testPathFeasibility(Path &path) {
     double y = path.y_points[i];
     double theta = car_.getAngle();
     if (i > 0) {
-      theta = atan2(y - path.y_points[i-1], x - path.x_points[i-1]);
+      theta = atan2(y - path.y_points[i - 1], x - path.x_points[i - 1]);
     }
-//    cout << x << ", " << y << "   (" << theta << ")" << endl;
 
     vector<double> car_in_frenet = getFrenet(x, y, theta, map_.x_waypoints, map_.y_waypoints);
     double ego_s = car_in_frenet[0];
@@ -415,75 +404,29 @@ bool PathGenerator::testPathFeasibility(Path &path) {
     for (int j = 0; j < sensor_fusion_data_.size(); j++) {
       SensorFusionData detected_car = sensor_fusion_data_[j];
 
-      //Skip most calculations if D is not in the lane
-//      double d_distance = abs(detected_car.d - d);
-//      if (d_distance > 3.0) {
-//        continue;
+      //Estimate detect cars speed in the j steps in the future
+      const double estimated_detected_car_speed =
+          sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2)) / 50;
+      const double detected_car_s = detected_car.s + estimated_detected_car_speed * i;
+
+      //Calculates the euclidian distance in frenet space
+      double distance_between_cars = sqrt(pow(detected_car_s - ego_s, 2) + pow(detected_car.d - ego_d, 2));
+
+      //TODO: debugging only, remove me
+//      if (distance_between_cars < 20) {
+//        cout << "distance to detected car: " << distance_between_cars;
+//        cout << " lane: " << detected_car.d;
+//        cout << " step: " << j << endl;
 //      }
 
-      const double estimated_detected_car_speed = sqrt(pow(detected_car.x_speed, 2) + pow(detected_car.y_speed, 2))/50;
-      const double estimated_detected_s = detected_car.s + estimated_detected_car_speed * i;
-
-      double s_distance = abs(estimated_detected_s - ego_s);
-      double d_distance = abs(detected_car.d - ego_d);
-
-//      cout << "step " << i << " car " << detected_car.id << " DISTANCE " << s_distance << ", " << d_distance << endl;
-
-      if (s_distance < 4 && d_distance < 2) {
-//        cout << "car state: " << car_.getControlState() << endl;
-//        cout << "step " << i << " car " << detected_car.id << " DISTANCE " << s_distance << ", " << d_distance << endl;
-//        cout << "unfeaseble path with detected car " << detected_car.id;
-//        cout << " at step " << i << "   ";
-//        cout << "  " << estimated_detected_s << ", " << detected_car.d << endl;
-//        cout << "   ego position: " << s << ", " << d << endl;
-//        return false;
-      }
-
-      double detected_car_front = estimated_detected_s + CAR_LENGTH;
-      double detected_car_rear = estimated_detected_s - CAR_LENGTH;
-
-      double ego_car_front = ego_s + CAR_LENGTH;
-      double ego_car_rear = ego_s - CAR_LENGTH;
-
-      if ((ego_car_front > detected_car_rear && ego_car_front < detected_car_front
-          || ego_car_rear > detected_car_rear && ego_car_rear < detected_car_front)) {
-
-        double d_distance = abs(detected_car.d - ego_d);
-        if (d_distance > 4.0) {
-          continue;
-        }
-
-//        cout << "unfeaseble path with detected car " << detected_car.id;
-//        cout << " at step " << i << "   ";
-//        cout << "  " << estimated_detected_s << ", " << detected_car.d << endl;
-//        cout << "   ego position: " << s << ", " << d << endl;
+      if (distance_between_cars < 8) {
+        cout << "NOT CHANGING LANE BECAUSE CAR ON LANE " << detected_car.d;
+        cout << "   distance: " << distance_between_cars;
+        cout << endl;
         return false;
       }
     }
-
-    if (i < 5) {
-      continue;
-    }
-
-//    //Now test if we don't violate certain limits
-//    double prev_x = path.x_points[i-1];
-//    double prev_y = path.x_points[i-1];
-//    double prev2_x = path.x_points[i-2];
-//    double prev2_y = path.x_points[i-2];
-//
-//    //Distance shouldn't be bigger than MAX_DIST_PER_SEC
-//    double speed1 = sqrt(pow(prev_x-x, 2) + pow(prev_y-y, 2));
-//    double speed2 = sqrt(pow(prev2_x-prev_x, 2) + pow(prev2_y-prev_y, 2));
-//    double accel1 = speed2 - speed1;
-//
-//    highest_accel = max(highest_accel, abs(accel1));
-//    if (abs(accel1) > .0045) {
-//      cout << speed1 << " -- " << speed2 << ":  " << accel1 << " TOO MUCH ACCELERATION! Unfeasible path" << endl;
-//      return false;
-//    }
   }
-
-//  cout << "HIGHEST ACCEL: " << highest_accel << endl;
 
   return true;
 }
