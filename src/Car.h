@@ -29,6 +29,7 @@ private:
   double s_;
   double d_;
   double speed_;
+  double target_lane_;
   ControlState control_state_;
 
   Map map_;
@@ -47,12 +48,11 @@ public:
    */
   void update(const std::vector<double> &updatedCarValue);
 
-  int getCurrentLane() const;
-
   double getX() const;
   double getY() const;
   double getAngle() const;
   double getYaw() const;
+  double getTargetLane() const;
 
   double getS() const;
   double getD() const;
@@ -65,6 +65,7 @@ public:
 
 
   void setMap(const Map map);
+  void setTargetLane(const double target_lane);
   void setControlState(const ControlState controlState);
 
   void update(const CarPosition &carPosition);

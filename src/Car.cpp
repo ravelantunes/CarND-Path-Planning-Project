@@ -50,6 +50,10 @@ double Car::getD() const { return d_; }
 
 double Car::getSpeed() const { return speed_; }
 
+void Car::setTargetLane(double target_lane) { target_lane_ = target_lane; }
+
+double Car::getTargetLane() const { return target_lane_; }
+
 void Car::setControlState(const ControlState controlState) {
   this->control_state_ = controlState;
 }

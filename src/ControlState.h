@@ -7,6 +7,7 @@
 
 enum ControlState {
   KEEP_LANE,
+  PREPARE_LANE_CHANGE,
   CHANGE_LANES
 };
 
